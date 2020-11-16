@@ -1,0 +1,140 @@
+      
+  <!--
+  This example uses the GDX JavaScript library to collect all of the sensor information from a Vernier Go Direct® Sensor.
+  Press the 'Select Go Direct Device' button to open communication to the device in a Chrome browser. 
+  This example does not collect data from a sensor. 
+  
+  This program uses the following functions from the GDX Library:
+  
+  gdxDevice.selectDevice();
+  gdxDevice.close();
+  gdxDevice.sensors.filter();
+  -->  
+
+
+<!doctype html>
+<html>
+<head>
+  <title>Example 1: Showing Sensor Information</title>
+  <meta name="description" content="Vernier Go Direct JavaScript Example">
+  <meta charset="utf-8">
+  <script src="https://unpkg.com/@vernier/godirect/dist/godirect.min.umd.js"></script>
+</head>
+
+<body>
+  <h1>Vernier Go Direct<sup>&reg</sup> JavaScript</h1>
+  <h2>Example 1: Showing Sensor Information</h2>
+  <p>
+    This example shows how you can use the godirect-js module to list information on a <a href="https://www.vernier.com/products/sensors/go-direct-sensors/">Vernier Go Direct Sensor</a>. This includes:
+    <ul>
+      <li>Name</li>
+      <li>Serial Number</li>
+      <li>Order Code</li>
+      <li>Typical Measurement Period</li>
+      <li>Battery Level</li>
+      <li>Charging State</li>
+      <li>Sensors:</li>
+      <ul>
+        <li>Name</li>
+        <li>Units</li>
+        <li>Incompatible Sensors</li>
+      </ul>
+    </ul>
+  </p>
+  <p id="connection_type">
+    <input type="radio" id="ble" name="type" value="1" checked>
+    <label id="ble_label" for="ble">Bluetooth</label>
+    <input type="radio" id="usb" name="type" value="0">
+    <label id="usb_label" for="usb">USB</label><br>
+  </p>
+  <button id="select_device">Select a Go Direct Device</button>
+  <div id="error"></div>
+  <pre id="output"></pre>
+  <script>
+    const usbBtn = document.querySelector('#usb');
+    const usbLabel = document.querySelector('#usb_label');
+    const bleBtn = document.querySelector('#ble');
+    const bleLabel = document.querySelector('#ble_label');
+    const selectDeviceBtn = document.querySelector('#select_device');
+    const output = document.querySelector('#output');
+    const error = document.querySelector('#error');
+
+    if (navigator.bluetooth) {
+      bleLabel.innerHTML = `Bluetooth`;
+    } else {
+      if (navigator.hid) usbBtn.checked = true;
+      bleLabel.innerHTML = `Bluetooth <span style="color:red">Not Supported</span> <a href="https://webbluetoothcg.github.io/web-bluetooth/">More information</a>`;
+      bleBtn.disabled = true;
+    }
+
+    if (navigator.hid) {
+      usbLabel.innerHTML = `USB`;
+    } else {
+      if (navigator.bluetooth) bleBtn.checked = true;
+      usbLabel.innerHTML = `USB <span style="color:red">Not Supported</span> <a href="https://wicg.github.io/webhid/">More information</a>`;
+      usbBtn.disabled = true;
+    }
+
+    if (!navigator.bluetooth && !navigator.hid) {
+      selectDeviceBtn.style.visibility='hidden';
+    } 
+
+
+    const selectDevice = async () => {
+      const bluetooth = document.querySelector('input[name="type"]:checked').value === "1";
+      error.textContent = "";
+      try {
+        const gdxDevice = await godirect.selectDevice(bluetooth);
+        // print name, serial number, order code and measurement period
+        output.textContent = `\n Connected to `+gdxDevice.name;
+        output.textContent += `\n Serial Number: `+gdxDevice.serialNumber;
+        output.textContent += `\n Order Code: `+gdxDevice.orderCode;
+        output.textContent += `\n Typical Measurement Period: `+gdxDevice.measurementPeriod + ` ms/sample`;
+      
+       
+        // wait for battery level and battery state and print
+        output.textContent += `\n Battery Level: `+await gdxDevice.getBatteryLevel() +`%`;
+        output.textContent += `\n Charging: ` +(await gdxDevice.getChargingState() === 1 ? `yes` : `no`);
+       
+        // print each type of sensor and its units        
+        gdxDevice.sensors.forEach(sensor => {
+           output.textContent += `\n\n Sensor: ${sensor.name} \n Units: ${sensor.unit}`;
+           // Look through all the sensors to see if they exist in the mutual exclusion mask for the current sensor.
+           var incompatibleSensors = [];
+           gdxDevice.sensors.forEach(sensorToCompare => {
+             // Only look at the sensor if it isn't the current sensor
+             if (sensor.number !== sensorToCompare.number) {
+               // Shift the sensor to compare number before seeing if it is in the mask.
+               var sensorToCompareMask = (1 << sensorToCompare.number);
+               if (sensor.specs.mutalExclusionMask & sensorToCompareMask) {
+                  incompatibleSensors.push(sensorToCompare);
+               }
+             }
+           });
+           if (incompatibleSensors.length > 0) {
+            output.textContent += `\n Incompatiable Sensors: `;
+            incompatibleSensors.forEach(sensor => {
+              output.textContent += `\n\t\t`+ sensor.name;
+            });
+           }
+        }); 
+        gdxDevice.close();
+     
+        // when the device is closed, display disconnection message 
+        gdxDevice.on('device-closed', () => {
+          output.textContent += `\n\n Disconnected from `+gdxDevice.name+`\n`;
+        });
+      
+      } catch (err) {
+        console.error(err);
+        error.innerText += "\n "+err;
+        if (err.toString().includes('cross-origin')) {
+          error.innerHTML+= '\n<p><b>Are you running in an embedded iframe? Try running this example in its own window.</b></p>'
+        }
+      }
+   
+    };
+    selectDeviceBtn.addEventListener('click', selectDevice);
+  </script>
+</body>
+</html>
